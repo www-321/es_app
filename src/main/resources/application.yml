@@ -1,0 +1,9 @@
+server:
+  port: 9800
+
+spring:
+  application:
+    name: ES-App
+  elasticsearch:
+    rest:
+      uris: localhost:9200
