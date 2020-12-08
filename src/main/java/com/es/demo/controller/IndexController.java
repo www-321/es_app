@@ -25,8 +25,11 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.index.query.IdsQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.WildcardQueryBuilder;
+import org.elasticsearch.index.reindex.UpdateByQueryRequest;
+import org.elasticsearch.script.Script;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.FieldSortBuilder;
@@ -37,10 +40,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 
 @RestController
 public class IndexController {
@@ -206,6 +206,8 @@ public class IndexController {
             bulkRequest.add(new IndexRequest().source(obj));
             //批量删除
             //bulkRequest.add(new DeleteRequest("index_user_nj", i + ""));
+            //批量更新
+            //bulkRequest.add(new UpdateRequest("index", "id"));
         }
 
         restHighLevelClient.bulk(bulkRequest, RequestOptions.DEFAULT);
@@ -213,7 +215,21 @@ public class IndexController {
 
 
     @GetMapping("update")
-    public void update() {
+    public void update() throws IOException {
+        //根据文档id更新
+        UpdateRequest updateRequest = new UpdateRequest("index_user_nj", "id1");
+        Map<String, Object> map = new HashMap<>();
+        map.put("name", "彭德怀");
+        updateRequest.doc(map);
+        restHighLevelClient.update(updateRequest, RequestOptions.DEFAULT);
+
+        //不知道id
+        UpdateByQueryRequest updateByQueryRequest = new UpdateByQueryRequest("index_user_nj*");
+        updateByQueryRequest.setQuery(QueryBuilders.termQuery("name.keyword", "武全"));
+        updateByQueryRequest.setScript(new Script(
+                Script.DEFAULT_SCRIPT_TYPE, "painless", "if (ctx._source.name= '武全') {ctx._source.name ='武全2'} ", Collections.emptyMap()
+        ));
+        restHighLevelClient.updateByQuery(updateByQueryRequest, RequestOptions.DEFAULT);
 
     }
 
@@ -238,6 +254,36 @@ public class IndexController {
 
 
     }
+
+
+
+    @GetMapping("search2")
+    public void search2() throws IOException {
+        QueryBuilders.termQuery("name.keyword", "武全");
+        QueryBuilders.termsQuery("age", 1, 2, 15);
+        QueryBuilders.matchQuery("name", "www");
+        QueryBuilders.multiMatchQuery("武全", "name", "age", "addr");
+        QueryBuilders.matchAllQuery();
+    }
+
+
+
+
+    @GetMapping("search_bool")
+    public void searchBool() throws IOException {
+        QueryBuilders.boolQuery()
+                .must(QueryBuilders.termQuery("name", ""))
+                .mustNot(QueryBuilders.termQuery("name", "ww"))
+        ;
+    }
+
+    @GetMapping("search_ids")
+    public void searchIds() throws IOException {
+        IdsQueryBuilder idsQueryBuilder = QueryBuilders.idsQuery().addIds("dsdsd", "id2");
+    }
+
+
+
 
 
 
