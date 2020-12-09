@@ -1,8 +1,5 @@
 server:
   port: 9800
 
-spring:
-  application:
-    name: ES-App
 
 

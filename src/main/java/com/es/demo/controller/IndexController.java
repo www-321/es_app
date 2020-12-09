@@ -1,8 +1,10 @@
 package com.es.demo.controller;
 
 import com.alibaba.fastjson.JSONObject;
+import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetRequest;
@@ -25,9 +27,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.index.query.IdsQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.index.query.WildcardQueryBuilder;
+import org.elasticsearch.index.query.*;
 import org.elasticsearch.index.reindex.UpdateByQueryRequest;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.search.SearchHit;
@@ -40,6 +40,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 @RestController
@@ -85,9 +86,9 @@ public class IndexController {
                 .put("index.translog.durability", "async")
                 .put("index.translog.sync_interval", "120s")
                 //分片数量
-                .put("index.number_of_shards", "5")
+                .put("index.number_of_shards", 1)
                 //副本数量
-                .put("index.number_of_replicas", "0")
+                .put("index.number_of_replicas", 0)
                 //单次最大查询数据的数量。默认10000。不要设置太高，如果有导出需求可以根据查询条件分批次查询。
                 .put("index.max_result_window", "100000"));
 
@@ -121,13 +122,13 @@ public class IndexController {
      */
     @GetMapping("mapping")
     public void mapping() throws IOException {
-        CreateIndexRequest createIndexRequest = new CreateIndexRequest("index_user_nj");
+        CreateIndexRequest createIndexRequest = new CreateIndexRequest("index_user_hf");
 
         createIndexRequest.settings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0));
 
         XContentBuilder jsonMapping = XContentFactory.jsonBuilder();
         jsonMapping.startObject().startObject("properties")
-                .startObject("name").field("type", "text").field("analyzer", "ik_max_word").endObject()
+                .startObject("name").field("type", "text").field("analyzer", "ik_smart").endObject()
                 .startObject("addr").field("type", "keyword").endObject()
                 .startObject("ipAddr").field("type", "ip").endObject()
                 .startObject("age").field("type", "long").endObject()
@@ -138,19 +139,89 @@ public class IndexController {
 
     }
 
-    @GetMapping("insert")
-    public void insert() throws IOException {
+    /*
+    设置分词器
+     */
+    @GetMapping("map")
+    public Object map() throws IOException {
+        CreateIndexRequest createIndexRequest = new CreateIndexRequest("index_bb");
 
-        IndexRequest indexRequest = new IndexRequest("index_user_nj*");
+        createIndexRequest.settings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0));
+        XContentBuilder jsonMapping = XContentFactory.jsonBuilder();
+        jsonMapping.startObject().startObject("properties")
+                .startObject("name")
+                    .field("type","text")
+                    .field("analyzer","ik_max_word")
+                    .field("search_analyzer","ik_smart")
+                        .startObject("fields")
+                            .startObject("keyword").field("type","keyword").endObject()
+                        .endObject()
+                .endObject()
+                //如果是嵌套文档，一定要在此处声明是nested
+                .startObject("human")
+                    .field("type","nested")
+                        .startObject("properties")
+                            .startObject("momname").field("type","keyword").endObject()
+                            .startObject("dadname").field("type","keyword").endObject()
+                        .endObject()
+                .endObject()
+                .startObject("age").field("type","integer").endObject()
+
+                .endObject().endObject();
+        createIndexRequest.mapping(jsonMapping);
+        CreateIndexResponse createIndexResponse = restHighLevelClient.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+
+        return createIndexResponse;
+
+    }
+
+
+
+
+
+
+
+    public Object get() throws IOException {
+        IndexRequest indexRequest = new IndexRequest("index_bb");
+        JSONObject obj = new JSONObject();
+        obj.put("name", "武全");
+
+        JSONObject hum = new JSONObject();
+        hum.put("momname","张三");
+        hum.put("dadname", "lisi");
+        obj.put("human", hum);
+
+        indexRequest.source(obj);
+        restHighLevelClient.index(indexRequest, RequestOptions.DEFAULT);
+
+        SearchRequest searchRequest = new SearchRequest("index_bb");
+
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query(QueryBuilders.nestedQuery("human", QueryBuilders.termQuery("momname", "张三"), ScoreMode.Avg));
+        searchRequest.source(searchSourceBuilder);
+        return   restHighLevelClient.search(searchRequest, RequestOptions.DEFAULT);
+
+
+    }
+
+
+
+
+    @GetMapping("insert")
+    public Object insert() throws IOException {
+
+        IndexRequest indexRequest = new IndexRequest("index_user_hf");
         JSONObject obj = new JSONObject();
         obj.put("name", "武全");
         obj.put("age", 18);
         obj.put("ip", "123.36.59.2");
         obj.put("addr", "中国");
-        obj.put("createTime", System.currentTimeMillis());
+        obj.put("createTime", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
         indexRequest.source(obj);
         IndexResponse index = restHighLevelClient.index(indexRequest, RequestOptions.DEFAULT);
-        index.status().getStatus();
+
+        return index.status().getStatus();
+
 
 
     }
@@ -194,9 +265,9 @@ public class IndexController {
      * 批量插入
      */
     @GetMapping("bulk_insert")
-    public void bulk() throws IOException {
+    public Object bulk() throws IOException {
 
-        BulkRequest bulkRequest = new BulkRequest("index_user_nj");
+        BulkRequest bulkRequest = new BulkRequest("index_user_nj_2020-01-02");
         for (int i = 0; i < 10000; i++) {
             JSONObject obj = new JSONObject();
             obj.put("age", i + 11);
@@ -210,7 +281,8 @@ public class IndexController {
             //bulkRequest.add(new UpdateRequest("index", "id"));
         }
 
-        restHighLevelClient.bulk(bulkRequest, RequestOptions.DEFAULT);
+        BulkResponse bulk = restHighLevelClient.bulk(bulkRequest, RequestOptions.DEFAULT);
+        return bulk.status().getStatus();
     }
 
 
@@ -260,7 +332,7 @@ public class IndexController {
     @GetMapping("search2")
     public void search2() throws IOException {
         QueryBuilders.termQuery("name.keyword", "武全");
-        QueryBuilders.termsQuery("age", 1, 2, 15);
+        QueryBuilders.termsQuery("age", "12","15");
         QueryBuilders.matchQuery("name", "www");
         QueryBuilders.multiMatchQuery("武全", "name", "age", "addr");
         QueryBuilders.matchAllQuery();
