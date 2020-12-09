@@ -24,6 +24,7 @@ import org.elasticsearch.client.indices.CreateIndexResponse;
 import org.elasticsearch.client.indices.FreezeIndexRequest;
 import org.elasticsearch.client.indices.PutIndexTemplateRequest;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -353,6 +354,63 @@ public class IndexController {
     public void searchIds() throws IOException {
         IdsQueryBuilder idsQueryBuilder = QueryBuilders.idsQuery().addIds("dsdsd", "id2");
     }
+
+
+    /**
+     * 模糊查询
+     * @return
+     */
+    public Object likeSearch() throws IOException {
+
+        SearchRequest searchRequest = new SearchRequest();
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        //方式1
+        QueryStringQueryBuilder stringQueryBuilder = QueryBuilders.queryStringQuery("fieldValue").field("fieldName").field("fieldName2").analyzer("ik_smart");
+        searchSourceBuilder.query(stringQueryBuilder);
+
+
+        //方式2
+        QueryBuilders.moreLikeThisQuery(new String[]{"",""},new String[]{""}, new MoreLikeThisQueryBuilder.Item[]{null});
+
+        //3.前缀查询  如果字段没分词，就匹配整个字段前缀
+        QueryBuilders.prefixQuery("fieldName","fieldValue");
+        //4.fuzzy query:分词模糊查询，通过增加fuzziness模糊属性来查询,
+        // 如能够匹配hotelName为tel前或后加一个字母的文档，fuzziness 的含义是检索的term 前后增加或减少n个单词的匹配查询
+        QueryBuilders.fuzzyQuery("hotelName", "tel").fuzziness(Fuzziness.ONE);
+        //5.wildcard query:通配符查询，支持* 任意字符串；？任意一个字符
+        QueryBuilders.wildcardQuery("fieldName","ctr*");//前面是fieldname，后面是带匹配字符的字符串
+        QueryBuilders.wildcardQuery("fieldName","c?r?");
+
+
+        return null;
+
+    }
+
+    /**
+     * 范围查询
+      * @return
+     */
+    @GetMapping("get")
+    public Object rangeSearch() {
+        //闭区间查询
+        QueryBuilder queryBuilder0 = QueryBuilders.rangeQuery("fieldName").from("fieldValue1").to("fieldValue2");
+        //开区间查询
+        QueryBuilder queryBuilder1 = QueryBuilders.rangeQuery("fieldName").from("fieldValue1").to("fieldValue2").includeUpper(false).includeLower(false);//默认是true，也就是包含
+        //大于
+        QueryBuilder queryBuilder2 = QueryBuilders.rangeQuery("fieldName").gt("fieldValue");
+        //大于等于
+        QueryBuilder queryBuilder3 = QueryBuilders.rangeQuery("fieldName").gte("fieldValue");
+        //小于
+        QueryBuilder queryBuilder4 = QueryBuilders.rangeQuery("fieldName").lt("fieldValue");
+        //小于等于
+        QueryBuilder queryBuilder5 = QueryBuilders.rangeQuery("fieldName").lte("fieldValue");
+
+        return null;
+    }
+
+
+
+
 
 
 
